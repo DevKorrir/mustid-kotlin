@@ -2,6 +2,7 @@ package dev.korryr.digitalid.ui.features.qrReader.view
 
 import android.Manifest
 import android.util.Log
+import android.widget.Toast
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -79,11 +80,14 @@ fun QRScannerScreen(
     onBackClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     // For showing full-screen image when the student image is tapped
     var showImageDialog by remember { mutableStateOf(false) }
     var selectedImageUrl by remember { mutableStateOf("") }
+
+    var showExpirationAlert by remember { mutableStateOf(false) }
+    var alertErrorMessage by remember { mutableStateOf("") }
 
     // State to track if a QR code has been scanned
     val studentState by viewModel.studentState
@@ -95,6 +99,64 @@ fun QRScannerScreen(
     // Request camera permission using Accompanist
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     LaunchedEffect(Unit) { cameraPermissionState.launchPermissionRequest() }
+
+    LaunchedEffect(studentState) {
+        if (studentState is Result.Error) {
+            val error = studentState as Result.Error
+            if (error.message.contains("expired", ignoreCase = true)) {
+                alertErrorMessage =
+                    "This QR Code has expired. Please ask the student to generate a new one."
+                showExpirationAlert = true
+            } else {
+                // For other errors, you might want to show a toast or handle differently
+                Toast.makeText(context, error.message, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+
+    if (showExpirationAlert) {
+        AlertDialog(
+            onDismissRequest = {
+                showExpirationAlert = false
+                isScanning = true
+                viewModel.resetScan()
+            },
+            title = {
+                Text(
+                    "QR Code Expired",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    alertErrorMessage,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showExpirationAlert = false
+                        isScanning = true
+                        viewModel.resetScan()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text("Try Again")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+
 
     Scaffold(
         topBar = {
@@ -165,7 +227,10 @@ fun QRScannerScreen(
                                 val imageAnalysis = ImageAnalysis.Builder()
                                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                     .build().also {
-                                        it.setAnalyzer(ContextCompat.getMainExecutor(context), analyzer)
+                                        it.setAnalyzer(
+                                            ContextCompat.getMainExecutor(context),
+                                            analyzer
+                                        )
                                     }
 
                                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -214,28 +279,45 @@ fun QRScannerScreen(
                         }
                     }
 
-                    // Error Display
-                    AnimatedVisibility(
-                        visible = studentState is Result.Error,
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.7f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            ErrorDisplay(
-                                message = if (studentState is Result.Error) {
-                                    (studentState as Result.Error).message
-                                } else "Unknown error"
-                            ) {
-                                isScanning = true
-                                viewModel.resetScan()
-                            }
-                        }
-                    }
+//                    // Error Display
+//                    AnimatedVisibility(
+//                        visible = studentState is Result.Error,
+//                        enter = fadeIn(),
+//                        exit = fadeOut()
+//                    ) {
+//                        Box(
+//                            modifier = Modifier
+//                                .fillMaxSize()
+//                                .background(Color.Black.copy(alpha = 0.7f)),
+//                            contentAlignment = Alignment.Center
+//                        ) {
+//
+//                            val error = studentState as? Result.Error
+//                            val errorMessage = if (error != null && error.message.contains("expired", ignoreCase = true)) {
+//                                "This QR Code has expired. Please ask the student to generate a new one."
+//                            } else {
+//                                error?.message ?: "Unknown error"
+//                            }
+//
+//                            ErrorDisplay(
+//                                message = errorMessage,
+//                                onDismiss = {
+//                                    isScanning = true
+//                                    viewModel.resetScan()
+//                                }
+//                            )
+
+//                            ErrorDisplay(
+//                                message = if (studentState is Result.Error) {
+//                                    (studentState as Result.Error).message
+//                                } else "Unknown error"
+//                            ) {
+//                                isScanning = true
+//                                viewModel.resetScan()
+//                            }
+
+                       // }
+                  //  }
                 }
             } else if (!cameraPermissionState.status.isGranted) {
                 // Permission not granted view
@@ -325,7 +407,7 @@ fun QRScannerScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.Start,
                                 verticalAlignment = Alignment.CenterVertically
-                            ){
+                            ) {
                                 IconButton(
                                     onClick = { showImageDialog = false },
                                 ) {

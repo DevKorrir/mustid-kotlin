@@ -41,7 +41,7 @@ fun QRScannerOverlay() {
         // Semi-transparent overlay
         Box(modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.65f))
+            .background(Color.Black.copy(alpha = 0.0f))
             .zIndex(0f)
         )
 
